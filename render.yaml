@@ -1,0 +1,111 @@
+services:
+  - type: web
+    name: freshcart-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # ── Application ──────────────────────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+
+      # ── Database (auto-linked from Render PostgreSQL) ─────────────────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: freshcart-db
+          property: connectionString
+
+      # ── Redis ─────────────────────────────────────────────────────────────
+      # Set REDIS_URL manually in the Render dashboard after creating a Redis
+      # instance (Render Redis or Upstash). Example:
+      #   redis://default:<password>@<host>:<port>
+      - key: REDIS_URL
+        sync: false
+
+      # ── JWT ───────────────────────────────────────────────────────────────
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
+
+      # ── Security ──────────────────────────────────────────────────────────
+      - key: BCRYPT_ROUNDS
+        value: "12"
+
+      # ── CORS ──────────────────────────────────────────────────────────────
+      # Update this to your actual Netlify URL after the frontend is deployed
+      - key: FRONTEND_URL
+        value: https://your-app.netlify.app
+
+      # ── OAuth (set manually in dashboard) ────────────────────────────────
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        value: https://freshcart-backend.onrender.com/api/auth/google/callback
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_CALLBACK_URL
+        value: https://freshcart-backend.onrender.com/api/auth/facebook/callback
+
+      # ── Payments (set manually in dashboard) ─────────────────────────────
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+
+      # ── Email / SMTP (set manually in dashboard) ──────────────────────────
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        value: "FreshCart <noreply@freshcart.com>"
+
+      # ── AWS S3 (set manually in dashboard) ───────────────────────────────
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: AWS_S3_BUCKET
+        sync: false
+      - key: CLOUDFRONT_URL
+        sync: false
+
+      # ── Push Notifications (set manually in dashboard) ────────────────────
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        value: mailto:admin@freshcart.com
+      - key: FCM_SERVER_KEY
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+
+databases:
+  - name: freshcart-db
+    databaseName: grocery_db
+    user: freshcart
+    plan: free

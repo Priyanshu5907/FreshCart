@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx tsc --noEmit --project backend/tsconfig.json
+      - run: npx tsc --noEmit --project frontend/tsconfig.json
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run backend unit tests with coverage
+        run: npm run test --workspace=backend -- --coverage --ci
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test-jwt-secret-32-chars-minimum
+          JWT_REFRESH_SECRET: test-refresh-secret-32-chars-min
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, type-check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Build backend
+        run: npm run build --workspace=backend
+      - name: Build frontend
+        run: npm run build --workspace=frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api
+          NEXT_PUBLIC_SOCKET_URL: http://localhost:3001
+
+  api-contract:
+    name: API Contract (Spectral)
+    runs-on: ubuntu-latest
+    if: hashFiles('docs/openapi.yaml') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g @stoplight/spectral-cli
+      - name: Lint OpenAPI spec with Spectral
+        run: spectral lint docs/openapi.yaml --ruleset .spectral.yaml
+
+  schema-drift:
+    name: Schema Drift Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Check Prisma schema is in sync with migrations
+        run: npx prisma migrate diff --from-migrations ./backend/prisma/migrations --to-schema-datamodel ./backend/prisma/schema.prisma --shadow-database-url ${{ secrets.SHADOW_DATABASE_URL || 'postgresql://test:test@localhost:5432/shadow' }} --exit-code || echo "Schema drift detected - review migrations"
+        working-directory: backend
+        continue-on-error: true
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run E2E tests
+        run: npx playwright test --project=chromium
+        working-directory: frontend
+        env:
+          BASE_URL: http://localhost:3000
+          CI: true

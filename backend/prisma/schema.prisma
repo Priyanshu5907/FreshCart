@@ -1,0 +1,358 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String?   @unique @db.VarChar(255)
+  phone          String?   @unique @db.VarChar(20)
+  passwordHash   String?   @map("password_hash") @db.VarChar(255)
+  role           String    @default("customer") @db.VarChar(20)
+  name           String    @db.VarChar(200)
+  isActive       Boolean   @default(true) @map("is_active")
+  emailVerified  Boolean   @default(false) @map("email_verified")
+  phoneVerified  Boolean   @default(false) @map("phone_verified")
+  languagePref   String    @default("en") @map("language_pref") @db.VarChar(10)
+  themePref      String    @default("light") @map("theme_pref") @db.VarChar(10)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  oauthAccounts  OauthAccount[]
+  refreshTokens  RefreshToken[]
+  addresses      Address[]
+
+  @@index([email], name: "idx_users_email")
+  @@index([phone], name: "idx_users_phone")
+  @@index([role], name: "idx_users_role")
+  @@map("users")
+}
+
+model OauthAccount {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  provider   String   @db.VarChar(50)
+  providerId String   @map("provider_id") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@map("oauth_accounts")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Address {
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String  @map("user_id") @db.Uuid
+  label     String  @default("Home") @db.VarChar(50)
+  street    String  @db.Text
+  city      String  @db.VarChar(100)
+  state     String  @db.VarChar(100)
+  pinCode   String  @map("pin_code") @db.Char(6)
+  landmark  String? @db.VarChar(200)
+  isDefault Boolean @default(false) @map("is_default")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([userId], name: "idx_addresses_user")
+  @@map("addresses")
+}
+
+model Category {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @unique @db.VarChar(100)
+  slug      String    @unique @db.VarChar(100)
+  imageUrl  String?   @map("image_url") @db.Text
+  isActive  Boolean   @default(true) @map("is_active")
+  sortOrder Int       @default(0) @map("sort_order")
+
+  products  Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id           String    @id @default(uuid()) @db.Uuid
+  categoryId   String    @map("category_id") @db.Uuid
+  name         String    @db.VarChar(200)
+  slug         String    @unique @db.VarChar(200)
+  description  String?   @db.Text
+  brand        String?   @db.VarChar(100)
+  price        Decimal   @db.Decimal(10, 2)
+  discountPct  Decimal   @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  stockQty     Int       @default(0) @map("stock_qty")
+  isFeatured   Boolean   @default(false) @map("is_featured")
+  isActive     Boolean   @default(true) @map("is_active")
+  isDeleted    Boolean   @default(false) @map("is_deleted")
+  dealExpiresAt DateTime? @map("deal_expires_at") @db.Timestamptz
+  // search_vector is managed by a PostgreSQL trigger (task 2.10)
+  // Prisma does not natively support TSVECTOR; it is accessed via raw queries
+
+  category     Category       @relation(fields: [categoryId], references: [id])
+  images       ProductImage[]
+  reviews      Review[]
+
+  @@index([categoryId], name: "idx_products_category")
+  @@index([isActive, isDeleted], name: "idx_products_active")
+  @@index([price], name: "idx_products_price")
+  @@index([stockQty], name: "idx_products_stock")
+  @@map("products")
+}
+
+model ProductImage {
+  id        String @id @default(uuid()) @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  url       String @db.Text
+  sortOrder Int    @default(0) @map("sort_order")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId], name: "idx_product_images_product")
+  @@map("product_images")
+}
+
+model Review {
+  id                 String  @id @default(uuid()) @db.Uuid
+  productId          String  @map("product_id") @db.Uuid
+  userId             String  @map("user_id") @db.Uuid
+  rating             Int     @db.SmallInt
+  comment            String? @db.VarChar(500)
+  isVerifiedPurchase Boolean @default(false) @map("is_verified_purchase")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId])
+  @@index([productId], name: "idx_reviews_product")
+  @@map("reviews")
+}
+
+model Cart {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  cartId      String  @map("cart_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  quantity    Int     @default(1)
+  savedLater  Boolean @default(false) @map("saved_later")
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([cartId], name: "idx_cart_items_cart")
+  @@map("cart_items")
+}
+
+model Coupon {
+  id            String    @id @default(uuid()) @db.Uuid
+  code          String    @unique @db.VarChar(20)
+  discountType  String    @map("discount_type") @db.VarChar(20)
+  discountValue Decimal   @map("discount_value") @db.Decimal(10, 2)
+  minOrderValue Decimal?  @map("min_order_value") @db.Decimal(10, 2)
+  maxUses       Int?      @map("max_uses")
+  usesCount     Int       @default(0) @map("uses_count")
+  startsAt      DateTime  @map("starts_at") @db.Timestamptz
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz
+  isActive      Boolean   @default(true) @map("is_active")
+
+  orders Order[]
+
+  @@index([code], name: "idx_coupons_code")
+  @@map("coupons")
+}
+
+model DeliverySlot {
+  id          String   @id @default(uuid()) @db.Uuid
+  slotDate    DateTime @map("slot_date") @db.Date
+  startTime   DateTime @map("start_time") @db.Time
+  endTime     DateTime @map("end_time") @db.Time
+  maxOrders   Int      @default(20) @map("max_orders")
+  bookedCount Int      @default(0) @map("booked_count")
+  isActive    Boolean  @default(true) @map("is_active")
+
+  orders Order[]
+
+  @@unique([slotDate, startTime])
+  @@index([slotDate], name: "idx_delivery_slots_date")
+  @@map("delivery_slots")
+}
+
+model Order {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  addressId           String    @map("address_id") @db.Uuid
+  deliverySlotId      String    @map("delivery_slot_id") @db.Uuid
+  deliveryPartnerId   String?   @map("delivery_partner_id") @db.Uuid
+  couponId            String?   @map("coupon_id") @db.Uuid
+  status              String    @default("confirmed") @db.VarChar(30)
+  paymentMethod       String    @map("payment_method") @db.VarChar(20)
+  paymentStatus       String    @default("pending") @map("payment_status") @db.VarChar(20)
+  paymentGatewayId    String?   @map("payment_gateway_id") @db.VarChar(255)
+  subtotal            Decimal   @db.Decimal(10, 2)
+  discountAmount      Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  deliveryFee         Decimal   @default(0) @map("delivery_fee") @db.Decimal(10, 2)
+  taxAmount           Decimal   @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  total               Decimal   @db.Decimal(10, 2)
+  cancellationReason  String?   @map("cancellation_reason") @db.Text
+  deliveredAt         DateTime? @map("delivered_at") @db.Timestamptz
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  address      Address      @relation(fields: [addressId], references: [id])
+  deliverySlot DeliverySlot @relation(fields: [deliverySlotId], references: [id])
+  coupon       Coupon?      @relation(fields: [couponId], references: [id])
+  items        OrderItem[]
+  statusHistory OrderStatusHistory[]
+
+  @@index([userId], name: "idx_orders_user")
+  @@index([status], name: "idx_orders_status")
+  @@index([deliveryPartnerId], name: "idx_orders_delivery_partner")
+  @@index([createdAt(sort: Desc)], name: "idx_orders_created_desc")
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  orderId     String  @map("order_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  productName String  @map("product_name") @db.VarChar(200)
+  quantity    Int
+  unitPrice   Decimal @map("unit_price") @db.Decimal(10, 2)
+  discountPct Decimal @default(0) @map("discount_pct") @db.Decimal(5, 2)
+  totalPrice  Decimal @map("total_price") @db.Decimal(10, 2)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId], name: "idx_order_items_order")
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @map("order_id") @db.Uuid
+  status    String   @db.VarChar(30)
+  changedBy String?  @map("changed_by") @db.Uuid
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId], name: "idx_order_status_history_order")
+  @@map("order_status_history")
+}
+
+model Wishlist {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+
+  @@unique([userId, productId])
+  @@index([userId], name: "idx_wishlists_user")
+  @@map("wishlists")
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @db.Text
+  platform  String   @default("web") @db.VarChar(20)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([userId], name: "idx_device_tokens_user")
+  @@map("device_tokens")
+}
+
+model Banner {
+  id        String    @id @default(uuid()) @db.Uuid
+  title     String    @db.VarChar(200)
+  imageUrl  String    @map("image_url") @db.Text
+  linkUrl   String?   @map("link_url") @db.Text
+  sortOrder Int       @default(0) @map("sort_order")
+  isActive  Boolean   @default(true) @map("is_active")
+  startsAt  DateTime? @map("starts_at") @db.Timestamptz
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz
+
+  @@map("banners")
+}
+
+model SubscriptionPlan {
+  id             String  @id @default(uuid()) @db.Uuid
+  name           String  @db.VarChar(100)
+  billingCycle   String  @map("billing_cycle") @db.VarChar(20)
+  price          Decimal @db.Decimal(10, 2)
+  freeDelivery   Boolean @default(true) @map("free_delivery")
+  orderDiscount  Decimal @default(0) @map("order_discount") @db.Decimal(5, 2)
+  isActive       Boolean @default(true) @map("is_active")
+
+  subscriptions UserSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model UserSubscription {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  planId           String    @map("plan_id") @db.Uuid
+  status           String    @default("active") @db.VarChar(20)
+  gatewaySubId     String?   @map("gateway_sub_id") @db.VarChar(255)
+  startsAt         DateTime  @map("starts_at") @db.Timestamptz
+  renewsAt         DateTime  @map("renews_at") @db.Timestamptz
+  gracePeriodEnds  DateTime? @map("grace_period_ends") @db.Timestamptz
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([userId], name: "idx_user_subscriptions_user")
+  @@map("user_subscriptions")
+}
+
+model LoyaltyPoint {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  orderId     String?  @map("order_id") @db.Uuid
+  points      Int
+  type        String   @db.VarChar(20)
+  description String?  @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId], name: "idx_loyalty_points_user")
+  @@map("loyalty_points")
+}
+
+model DeliveryPartnerLocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  latitude  Decimal  @db.Decimal(10, 7)
+  longitude Decimal  @db.Decimal(10, 7)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("delivery_partner_locations")
+}

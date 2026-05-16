@@ -1,0 +1,38 @@
+extends: ["spectral:oas"]
+
+rules:
+  # Require all operations to have a summary
+  operation-summary:
+    description: "All operations must have a summary"
+    given: "$.paths[*][*]"
+    severity: warn
+    then:
+      field: summary
+      function: truthy
+
+  # Require all operations to have at least one response
+  operation-success-response:
+    description: "Operations must have a 2xx response"
+    given: "$.paths[*][*]"
+    severity: error
+    then:
+      field: responses
+      function: truthy
+
+  # Require tags on all operations
+  operation-tags:
+    description: "All operations should have tags"
+    given: "$.paths[*][*]"
+    severity: warn
+    then:
+      field: tags
+      function: truthy
+
+  # Require info.version
+  info-version:
+    description: "API must have a version"
+    given: "$.info"
+    severity: error
+    then:
+      field: version
+      function: truthy

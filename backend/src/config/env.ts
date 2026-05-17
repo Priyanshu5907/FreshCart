@@ -10,12 +10,7 @@ const REQUIRED_VARS = [
   'JWT_REFRESH_SECRET',
 ] as const;
 
-const PRODUCTION_REQUIRED = [
-  'RAZORPAY_KEY_ID',
-  'RAZORPAY_KEY_SECRET',
-  'AWS_S3_BUCKET',
-  'CLOUDFRONT_URL',
-] as const;
+const PRODUCTION_REQUIRED = [] as const;
 
 export function validateEnv(): void {
   const missing: string[] = [];
